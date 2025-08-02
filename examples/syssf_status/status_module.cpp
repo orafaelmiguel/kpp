@@ -6,7 +6,7 @@ class StatusModule
 {
 public:
     kpp::KObject kobj;
-    const char* message = "K++ Milestone II is running!";
+    const char* message = "Kpp is running!";
 };
 
 kpp::UniquePtr<StatusModule> g_status_module;
