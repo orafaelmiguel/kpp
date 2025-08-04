@@ -3,6 +3,7 @@
 
 #include <linux/net.h>
 #include <linux/socket.h>
+#include <linux/in.h>
 #include <kpp/core/Freestanding.hpp>
 #include <kpp/core/Error.hpp>
 
@@ -22,6 +23,8 @@ namespace kpp
                 sock_ = nullptr;
             }
         }
+
+        explicit KernelSocket(struct socket* existing_sock = nullptr) : sock_(existing_sock) {}
 
         ~KernelSocket()
         {
@@ -53,6 +56,58 @@ namespace kpp
             return *this;
         }
 
+        int connect(struct sockaddr* addr, int addr_len, int flags)
+        {
+            return sock_ ? sock_->ops->connect(sock_, addr, addr_len, flags) : -EINVAL;
+        }
+
+        int bind(struct sockaddr* addr, int addr_len)
+        {
+            return sock_ ? sock_->ops->bind(sock_, addr, addr_len) : -EINVAL;
+        }
+
+        int listen(int backlog)
+        {
+            return sock_ ? sock_->ops->listen(sock_, backlog) : -EINVAL;
+        }
+
+        KernelSocket accept()
+        {
+            struct socket* new_sock = nullptr;
+            int ret = sock_ ? sock_->ops->accept(sock_, new_sock, 0, false) : -EINVAL;
+            if (ret < 0)
+            {
+                return KernelSocket(nullptr);
+            }
+            return KernelSocket(new_sock);
+        }
+
+        ssize_t send(const void* buffer, size_t length, int flags)
+        {
+            if (!sock_) return -EINVAL;
+
+            struct kvec vec = { .iov_base = const_cast<void*>(buffer), .iov_len = length };
+            struct msghdr msg = { .msg_flags = flags };
+            return kernel_sendmsg(sock_, &msg, &vec, 1, length);
+        }
+
+        ssize_t receive(void* buffer, size_t length, int flags)
+        {
+            if (!sock_) return -EINVAL;
+
+            struct kvec vec = { .iov_base = buffer, .iov_len = length };
+            struct msghdr msg = { .msg_flags = flags };
+            return kernel_recvmsg(sock_, &msg, &vec, 1, length, flags);
+        }
+
+        void shutdown()
+        {
+            if (sock_)
+            {
+                kernel_sock_shutdown(sock_, SHUT_RDWR);
+            }
+        }
+
         struct socket* native_handle() const
         {
             return sock_;
@@ -65,5 +120,4 @@ namespace kpp
     };
 
 }
-
 #endif // KPP_NET_KERNELSOCKET_HPP
