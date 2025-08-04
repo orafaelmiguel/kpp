@@ -89,3 +89,8 @@ static void __exit hello_kpp_exit(void)
 module_init(hello_kpp_init);
 module_exit(hello_kpp_exit);
 MODULE_LICENSE("GPL");
+
+```
+## Contributing
+
+Contributions are highly welcome! <3
