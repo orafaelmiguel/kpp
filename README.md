@@ -2,17 +2,30 @@
 
 KPP is a header-only, freestanding C++ library designed to bring the safety and expressiveness of modern C++ to Linux kernel module development. It provides a set of zero-cost abstractions over common kernel APIs, aiming to reduce boilerplate, improve type safety, and eliminate entire classes of common bugs like resource and memory leaks.
 
-## Core 
+## Features
 
-* **Freestanding Environment:** Provides the necessary C++ primitives (`placement new`, `nullptr_t`, `size_t`) to work without the standard library.
-* **Type-Safe Logging:** A convenient, variadic `kpp::log` function that wraps `printk` safely.
-* **Type-Safe Error Handling:** A `kpp::Error` class that encapsulates integer error codes to prevent misuse.
-* **RAII Synchronization Primitives:**
-    * `kpp::SpinLock`: A wrapper for the kernel's `spinlock_t`.
-    * `kpp::ScopedLock`: A generic RAII guard that ensures locks are always released.
-* **RAII Memory Management:**
-    * `kpp::UniquePtr`: A kernel-compatible smart pointer with exclusive ownership for memory allocated via `kmalloc`.
-    * `kpp::make_unique`: A factory function for safe allocation and construction.
+### Core & RAII Foundation
+* **Freestanding Environment:** Provides the necessary C++ primitives (`placement new`, `nullptr_t`, `size_t`).
+* **Type-Safe Utilities:** `kpp::log` for `printk`, `kpp::Error` for error codes, and `kpp::StringView` for safe string handling.
+* **RAII Synchronization:** `kpp::SpinLock`, `kpp::Mutex`, `kpp::Semaphore`, `kpp::Completion`, and a generic `kpp::ScopedLock`.
+* **RAII Memory Management:** `kpp::UniquePtr` and `kpp::SharedPtr` for automatic memory management.
+* **Async Utilities:** RAII wrappers for `kpp::Timer` and `kpp::WorkQueue`.
+
+### Device Model & Sysfs
+* **Device Model Objects:** `kpp::Kref`, `kpp::KObject`, and `kpp::KSet` provide a robust, RAII-based foundation for creating objects recognized by the kernel.
+* **Sysfs Integration:** `kpp::Attribute` and `kpp::AttributeGroup` allow C++ member functions to be used directly as `sysfs` callbacks, eliminating complex C boilerplate.
+* **Debugging Utilities:** `kpp::debugfs` helpers provide a simple RAII interface for creating debug files and directories.
+
+### Character Devices & VFS
+* **File Operations Abstraction:** `kpp::FileOperations<Owner>` allows VFS callbacks (`open`, `read`, `write`, `ioctl`, `poll`, `mmap`) to be defined as C++ class member functions.
+* **RAII Character Device:** A suite of classes (`kpp::CharDevice`, `kpp::DeviceClass`, `kpp::Device`) that automate the entire lifecycle of character device registration and `/dev` node creation.
+* **Safe User Data Transfer:** Type-safe template wrappers `kpp::copy_to_user` and `kpp::copy_from_user` that automatically infer data size.
+
+### Networking Stack
+* **RAII Packet Management:** `kpp::SKB` provides a wrapper for `struct sk_buff` that manages its lifecycle automatically and provides safe access to network headers.
+* **Netfilter Hook Management:** `kpp::NetfilterHook` ensures Netfilter hooks are always safely registered and unregistered via RAII.
+* **In-Kernel Networking:** `kpp::KernelSocket` and `kpp::NetlinkSocket` provide a high-level API for performing network I/O from within the kernel.
+* **Advanced Networking:** Wrappers for `net_device`, `dst_entry`, and `XDP` attachment.
 
 ## Getting Started
 
@@ -22,76 +35,57 @@ KPP is a header-only, freestanding C++ library designed to bring the safety and 
 * A C++ compiler (`g++`) compatible with C++17.
 * `make`.
 
-### Build System
-
-K++ integrates with the standard kernel build system. To build a module that uses the library, you will need a `Makefile` in your module's directory. See the example below for a template.
-
 ### IDE Setup (VS Code, CLion, etc.)
 
-To get full IDE support (autocomplete, code navigation), you need to generate a `compile_commands.json` file. This allows language servers like `clangd` to understand the project structure.
+To get full IDE support (autocomplete, code navigation), generate a `compile_commands.json` file.
 
 1.  Navigate to an example directory (e.g., `examples/01_hello_world`).
 2.  Run the `make` command with `clang` to generate the compilation database:
     ```bash
     make -C /lib/modules/$(uname -r)/build M=$(pwd) CC=clang KCFLAGS=-Wno-error=incompatible-pointer-types-discards-qualifiers compile_commands.json
     ```
-3.  Create a symbolic link to this file in the project's root directory so your IDE can find it:
+3.  Create a symbolic link to this file in the project's root directory:
     ```bash
     # From the project root
     ln -s examples/01_hello_world/compile_commands.json .
     ```
-4.  Reload your IDE. You should now have full language support.
+4.  Reload your IDE.
 
-## Usage Example
+## Usage Examples
 
-Here is a simple kernel module that demonstrates logging and memory management with K++.
+### Example 1: Basic RAII Memory Management
+
+This module demonstrates basic logging and automatic memory management.
 
 **`examples/01_hello_world/hello_kpp.cpp`**
 ```cpp
-#include <kpp/kpp.hpp> // Main convenience header for K++
+#include <kpp/kpp.hpp>
 
-// A simple structure for our example
 struct MyData {
     int id;
     long value;
 };
 
-// Global pointer to our allocated data, managed by UniquePtr
 kpp::UniquePtr<MyData> g_my_data;
 
 static int __init hello_kpp_init(void)
 {
-    kpp::log<KERN_INFO>("K++ module loading.");
-
-    // Allocate and construct MyData using the kpp::make_unique helper.
-    // Memory will be automatically freed when the module unloads.
+    kpp::log<KERN_INFO>("K++: Hello World module loading.");
     g_my_data = kpp::make_unique<MyData>(GFP_KERNEL);
-
     if (!g_my_data) {
-        kpp::log<KERN_ERR>("Failed to allocate memory.");
         return -ENOMEM;
     }
-
-    // Initialize the data using smart pointer syntax
     g_my_data->id = 10;
-    g_my_data->value = 12345L;
-
-    kpp::log<KERN_INFO>("MyData allocated and initialized. ID:", g_my_data->id);
-
+    kpp::log<KERN_INFO>("K++: Data allocated with ID:", g_my_data->id);
     return 0;
 }
 
 static void __exit hello_kpp_exit(void)
 {
-    // The g_my_data UniquePtr goes out of scope when the module unloads.
-    // Its destructor is called, which automatically calls kfree on the pointer.
-    // No manual cleanup is needed.
-    kpp::log<KERN_INFO>("K++ module unloading. Memory will be freed automatically.");
+    // g_my_data's destructor is called automatically, freeing the memory.
+    kpp::log<KERN_INFO>("K++: Hello World module unloading.");
 }
 
 module_init(hello_kpp_init);
 module_exit(hello_kpp_exit);
-
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("K++ Developer");
-MODULE_DESCRIPTION("A simple K++ example module.");
