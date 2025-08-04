@@ -2,6 +2,9 @@
 #define KPP_NET_SKB_HPP
 
 #include <linux/skbuff.h>
+#include <linux/ip.h>
+#include <linux/tcp.h>
+#include <linux/udp.h>
 #include <kpp/core/Freestanding.hpp>
 
 namespace kpp
@@ -72,6 +75,21 @@ namespace kpp
         void reserve(unsigned int len)
         {
             skb_reserve(skb_, len);
+        }
+        //protocols 
+        struct iphdr* ip_header() const
+        {
+            return skb_ ? ip_hdr(skb_) : nullptr;
+        }
+
+        struct tcphdr* tcp_header() const
+        {
+            return skb_ ? tcp_hdr(skb_) : nullptr;
+        }
+
+        struct udphdr* udp_header() const
+        {
+            return skb_ ? udp_hdr(skb_) : nullptr;
         }
 
         explicit operator bool() const noexcept
