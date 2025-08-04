@@ -1,4 +1,4 @@
-# KPP
+# Kpp
 
 KPP is a header-only, freestanding C++ library designed to bring the safety and expressiveness of modern C++ to Linux kernel module development. It provides a set of zero-cost abstractions over common kernel APIs, aiming to reduce boilerplate, improve type safety, and eliminate entire classes of common bugs like resource and memory leaks.
 
